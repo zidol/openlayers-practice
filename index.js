@@ -1,15 +1,20 @@
 import "ol/ol.css";
-import Circle from "ol/geom/Circle";
-import Feature from "ol/Feature";
 import GeoJSON from "ol/format/GeoJSON";
 import Map from "ol/Map";
 import View from "ol/View";
+import {DragBox, Select} from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style } from "ol/style";
 import { OSM, Vector as VectorSource } from "ol/source";
 import { Tile as TileLayer, Vector as VectorLayer } from "ol/layer";
 import proj4 from "proj4";
 import { register } from "ol/proj/proj4";
 import { get as getProjection } from "ol/proj";
+import {platformModifierKeyOnly} from 'ol/events/condition';
+import Overlay from 'ol/Overlay';
+import XYZ from 'ol/source/XYZ';
+import {toLonLat} from 'ol/proj';
+import {toStringHDMS} from 'ol/coordinate';
+
 var image = new CircleStyle({
   radius: 5,
   fill: null,
@@ -97,51 +102,6 @@ var geojsonObject = {
     {
       type: "Feature",
       geometry: {
-        type: "Point",
-        coordinates: [1110292.0883391346, 1841685.5549198543]
-      }
-    },
-    {
-      type: "Feature",
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [1110292.0883391346, 1841685.5549198543],
-            [1110245.8378409285, 1841692.6666170647],
-            [1110213.677576043, 1841694.7690716009],
-            [1110155.1895817479, 1841691.0751905642],
-            [1110140.8490816173, 1841690.149366993],
-            [1110140.542571588, 1841691.3374110227],
-            [1110137.4164913567, 1841690.6666865947],
-            [1110146.684912659, 1841665.0700765443],
-            [1110149.0259113666, 1841652.690398559],
-            [1110102.4129133618, 1841662.208092973],
-            [1110073.0931256032, 1841561.3525963407],
-            [1110057.7007561997, 1841508.3037909844],
-            [1110145.9539120179, 1841494.041017557],
-            [1110154.9748657614, 1841492.745076324],
-            [1110194.8233211976, 1841485.9493296945],
-            [1110209.894313258, 1841483.0590939308],
-            [1110235.9782160437, 1841477.8331705735],
-            [1110243.2776295093, 1841476.1394009164],
-            [1110277.882677912, 1841620.4763099696],
-            [1110285.9446856005, 1841657.4139691181],
-            [1110292.0883391346, 1841685.5549198543]
-          ]
-        ]
-      },
-      properties: {
-        SIG_CD: "47170",
-        SIG_KOR_NM: "안동시",
-        EMD_CD: "47170101",
-        EMD_ENG_NM: "Samsan-dong",
-        EMD_KOR_NM: "삼산동"
-      }
-    },
-    {
-      type: "Feature",
-      geometry: {
         type: "Polygon",
         coordinates: [
           [
@@ -211,12 +171,30 @@ var geojsonObject = {
     }
   ]
 };
+/**************overlay start *************** */
+
+/**
+ * Elements that make up the popup.
+ */
+var container = document.getElementById('popup');
+var content = document.getElementById('popup-content');
+var closer = document.getElementById('popup-closer');
+
+/**
+ * Add a click handler to hide the popup.
+ * @return {boolean} Don't follow the href.
+ */
+closer.onclick = function () {
+  overlay.setPosition(undefined);
+  closer.blur();
+  return false;
+};
+
+/**************overlay end *************** */
 
 var vectorSource = new VectorSource({
   features: new GeoJSON().readFeatures(geojsonObject)
 });
-
-vectorSource.addFeature(new Feature(new Circle([5e6, 7e6], 1e6)));
 
 var vectorLayer = new VectorLayer({
   source: vectorSource,
@@ -228,6 +206,19 @@ proj4.defs(
 );
 register(proj4);
 const koreaProjection = getProjection("EPSG:5179");
+
+
+/** overlay */
+/**
+ * Create an overlay to anchor the popup to the map.
+ */
+var overlay = new Overlay({
+  element: container,
+  autoPan: true,
+  autoPanAnimation: {
+    duration: 250,
+  },
+});
 var map = new Map({
   layers: [
     new TileLayer({
@@ -235,6 +226,7 @@ var map = new Map({
     }),
     vectorLayer
   ],
+  overlays: [overlay],
   target: "map",
   view: new View({
     projection: koreaProjection,
@@ -242,3 +234,55 @@ var map = new Map({
     zoom: 12
   })
 });
+
+/** overlay  code start **/
+/**
+ * Add a click handler to the map to render the popup.
+ */
+
+var selected = null;
+map.on('singleclick', function (evt) {
+    console.log(evt)
+  var coordinate = evt.coordinate;
+//   var hdms = toStringHDMS(toLonLat(coordinate));
+  if(selected != null) {
+    content.innerHTML = '<p>You clicked here: <code>' + selected.get('EMD_KOR_NM') + '</code></p>';
+    overlay.setPosition(coordinate);
+  } else {
+    closer.onclick()
+  }
+});
+/** overlay  code end*/
+
+
+var highlightStyle = new Style({
+  fill: new Fill({
+    color: 'rgba(255,255,255,0.7)',
+  }),
+  stroke: new Stroke({
+    color: '#3399CC',
+    width: 3,
+  }),
+});
+
+var status = document.getElementById('status');
+
+map.on('pointermove', function (e) {
+  if (selected !== null) {
+    selected.setStyle(undefined);
+    selected = null;
+  }
+
+  map.forEachFeatureAtPixel(e.pixel, function (f) {
+    selected = f;
+    f.setStyle(highlightStyle);
+    return true;
+  });
+
+  if (selected) {
+    status.innerHTML = '&nbsp;Hovering: ' + selected.get('EMD_KOR_NM');
+  } else {
+    status.innerHTML = '&nbsp;';
+  }
+});
+
