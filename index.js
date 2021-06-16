@@ -2,18 +2,13 @@ import "ol/ol.css";
 import GeoJSON from "ol/format/GeoJSON";
 import Map from "ol/Map";
 import View from "ol/View";
-import {DragBox, Select} from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style } from "ol/style";
 import { OSM, Vector as VectorSource } from "ol/source";
 import { Tile as TileLayer, Vector as VectorLayer } from "ol/layer";
 import proj4 from "proj4";
 import { register } from "ol/proj/proj4";
 import { get as getProjection } from "ol/proj";
-import {platformModifierKeyOnly} from 'ol/events/condition';
 import Overlay from 'ol/Overlay';
-import XYZ from 'ol/source/XYZ';
-import {toLonLat} from 'ol/proj';
-import {toStringHDMS} from 'ol/coordinate';
 
 var image = new CircleStyle({
   radius: 5,
@@ -42,8 +37,8 @@ var styles = {
   }),
   MultiPolygon: new Style({
     stroke: new Stroke({
-      color: "yellow",
-      width: 1
+      color: "blue",
+      width: 3
     }),
     fill: new Fill({
       color: "rgba(255, 255, 0, 0.1)"
@@ -171,6 +166,16 @@ var geojsonObject = {
     }
   ]
 };
+
+var vectorSource = new VectorSource({
+  url: 'http://112.220.90.93:8899/geoserver/test/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=test%3A%EC%8B%9C%EB%8F%84&maxFeatures=50&outputFormat=application%2Fjson',
+  format: new GeoJSON(),
+});
+
+var vectorSource2 = new VectorSource({
+  url: 'http://112.220.90.93:8899/geoserver/test/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=test%3A%EC%8B%9C%EA%B5%B0%EA%B5%AC&maxFeatures=50&outputFormat=application%2Fjson',
+  format: new GeoJSON(),
+});
 /**************overlay start *************** */
 
 /**
@@ -192,20 +197,29 @@ closer.onclick = function () {
 
 /**************overlay end *************** */
 
-var vectorSource = new VectorSource({
-  features: new GeoJSON().readFeatures(geojsonObject)
-});
+// var vectorSource = new VectorSource({
+//   features: new GeoJSON().readFeatures(geojsonObject)
+// });
 
 var vectorLayer = new VectorLayer({
   source: vectorSource,
   style: styleFunction
 });
+var vectorLayer2 = new VectorLayer({
+  source: vectorSource2,
+  style: styleFunction
+});
+// proj4.defs(
+//   "EPSG:5179",
+//   "+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs"
+// );
 proj4.defs(
-  "EPSG:5179",
-  "+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs"
+  "EPSG:4326",
+  "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 );
+
 register(proj4);
-const koreaProjection = getProjection("EPSG:5179");
+const koreaProjection = getProjection("EPSG:4326");
 
 
 /** overlay */
@@ -224,14 +238,15 @@ var map = new Map({
     new TileLayer({
       source: new OSM()
     }),
-    vectorLayer
+    vectorLayer,
+    // vectorLayer2
   ],
   overlays: [overlay],
   target: "map",
   view: new View({
     projection: koreaProjection,
-    center: [1110292.0883391346, 1841685.5549198543],
-    zoom: 12
+    center: [14143087.77691487,36.55891018869106],
+    zoom: 5
   })
 });
 
@@ -242,16 +257,26 @@ var map = new Map({
 
 var selected = null;
 map.on('singleclick', function (evt) {
-    console.log(evt)
   var coordinate = evt.coordinate;
 //   var hdms = toStringHDMS(toLonLat(coordinate));
+  console.log(selected);
   if(selected != null) {
-    content.innerHTML = '<p>You clicked here: <code>' + selected.get('EMD_KOR_NM') + '</code></p>';
+    if(selected.get('CTP_KOR_NM') != null) {
+      content.innerHTML = '<p>You clicked here: <code>' + selected.get('CTP_KOR_NM') + '</code></p>';
+    } else if(selected.get('CTP_KOR_NM') != null && selected.get('SIG_KOR_NM') != null){
+      content.innerHTML = '<p>You clicked here: <code>' + selected.get('CTP_KOR_NM') + ' ' +selected.get('SIG_KOR_NM') + '</code></p>';
+    } else if(selected.get('SIG_KOR_NM') != null){
+      content.innerHTML = '<p>You clicked here: <code>' + selected.get('SIG_KOR_NM') + '</code></p>';
+    } 
+    
     overlay.setPosition(coordinate);
   } else {
-    closer.onclick()
+    closer.onclick();
   }
 });
+map.on('dblclick', function(evt) {
+  console.log(evt)
+})
 /** overlay  code end*/
 
 
@@ -280,9 +305,37 @@ map.on('pointermove', function (e) {
   });
 
   if (selected) {
-    status.innerHTML = '&nbsp;Hovering: ' + selected.get('EMD_KOR_NM');
+    //  content.innerHTML = '<p>You clicked here: <code>' + selected.get('CTP_KOR_NM') + '</code></p>';
+    //  var coordinate = e.coordinate;
+    // overlay.setPosition(coordinate);
+    if(selected.get('CTP_KOR_NM') != null) {
+        status.innerHTML = '&nbsp;Hovering: ' + selected.get('CTP_KOR_NM');
+    } else if(selected.get('SIG_KOR_NM') != null) {
+        status.innerHTML = '&nbsp;Hovering: ' + selected.get('SIG_KOR_NM');
+    }
   } else {
     status.innerHTML = '&nbsp;';
   }
 });
 
+var currZoom = 0;
+map.on('moveend', function(e) {
+  var newZoom = map.getView().getZoom();
+  console.log('currZoom : ' + currZoom)
+  console.log('newZoom : ' + newZoom)
+  if(newZoom >= 10 && !(currZoom > 10)) {
+      // vectorLayer.getSource().clear();
+      // vectorSource.setUrl('http://112.220.90.93:8899/geoserver/test/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=test%3A%EC%8B%9C%EA%B5%B0%EA%B5%AC&maxFeatures=50&outputFormat=application%2Fjson');
+      // vectorSource.refresh(); 
+      // map.layers.push(vectorLayer2);
+      // vectorSource.refresh(); 
+      map.addLayer(vectorLayer2);
+
+  } else if(newZoom < 10 && !(currZoom < 10)){
+      map.removeLayer(vectorLayer2)
+    // vectorLayer.getSource().clear();
+    // vectorSource.setUrl('http://112.220.90.93:8899/geoserver/test/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=test%3A%EC%8B%9C%EB%8F%84&maxFeatures=50&outputFormat=application%2Fjson');
+    // vectorSource.refresh(); 
+  }
+  currZoom = map.getView().getZoom();
+})
